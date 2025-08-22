@@ -406,32 +406,35 @@
                         <label><strong>部屋:</strong></label>
                         <select id="roomSelect" onchange="updateShelfOptions()" style="margin: 5px; padding: 5px; width: 100%;">
                             <option value="">部屋を選択</option>
-                            <option value="リビング">リビング</option>
-                            <option value="寝室">寝室</option>
-                            <option value="書斎">書斎</option>
-                            <option value="子供部屋">子供部屋</option>
                             <option value="廊下">廊下</option>
+                            <option value="リビング棚">リビング棚</option>
+                            <option value="リビング本棚">リビング本棚</option>
+                            <option value="リビング本棚右">リビング本棚右</option>
+                            <option value="リビングみーしゃテーブル">リビングみーしゃテーブル</option>
+                            <option value="みーしゃ部屋">みーしゃ部屋</option>
+                            <option value="物置部屋">物置部屋</option>
+                            <option value="寝室">寝室</option>
                             <option value="その他">その他</option>
                         </select>
                     </div>
                     
                     <div style="margin: 10px 0;">
-                        <label><strong>本棚:</strong></label>
+                        <label><strong>本棚（任意）:</strong></label>
                         <select id="shelfSelect" onchange="updateLevelOptions()" style="margin: 5px; padding: 5px; width: 100%;">
-                            <option value="">本棚を選択</option>
+                            <option value="">本棚を選択（任意）</option>
                         </select>
                     </div>
                     
                     <div style="margin: 10px 0;">
-                        <label><strong>段:</strong></label>
+                        <label><strong>段（任意）:</strong></label>
                         <select id="levelSelect" style="margin: 5px; padding: 5px; width: 100%;">
-                            <option value="">段を選択</option>
+                            <option value="">段を選択（任意）</option>
                         </select>
                     </div>
                     
                     <div style="margin: 10px 0;">
-                        <label><strong>詳細位置:</strong></label>
-                        <input type="text" id="detailLocation" placeholder="左から3番目、奥など" style="margin: 5px; padding: 5px; width: 100%;">
+                        <label><strong>補足:</strong></label>
+                        <input type="text" id="detailLocation" placeholder="手前、奥、上から2冊目など" style="margin: 5px; padding: 5px; width: 100%;">
                     </div>
                     
                     <!-- QRコード読み取りオプション -->
@@ -474,30 +477,43 @@
 
         // 本棚位置管理機能
         
-        // 本棚の設定データ（カスタマイズ可能）
+        // 本棚の設定データ（ご家庭の構成に合わせてカスタマイズ）
         const SHELF_CONFIG = {
-            'リビング': {
-                'A棚': ['1段目', '2段目', '3段目', '4段目'],
-                'B棚': ['1段目', '2段目', '3段目'],
-                'テレビ台': ['上段', '下段']
+            '廊下': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
+            },
+            'リビング棚': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
+            },
+            'リビング本棚': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
+            },
+            'リビング本棚右': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
+            },
+            'リビングみーしゃテーブル': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
+            },
+            'みーしゃ部屋': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
+            },
+            '物置部屋': {
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
             },
             '寝室': {
-                'ベッドサイド棚': ['上段', '下段'],
-                'クローゼット棚': ['1段目', '2段目', '3段目']
-            },
-            '書斎': {
-                'デスク棚': ['1段目', '2段目', '3段目'],
-                '壁面書棚': ['1段目', '2段目', '3段目', '4段目', '5段目']
-            },
-            '子供部屋': {
-                '学習机棚': ['上段', '下段'],
-                '絵本棚': ['1段目', '2段目', '3段目']
-            },
-            '廊下': {
-                '廊下棚': ['1段目', '2段目']
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
             },
             'その他': {
-                'カスタム棚': ['上段', '中段', '下段']
+                '左': ['1', '2', '3', '4'],
+                '右': ['1', '2', '3', '4']
             }
         };
 
@@ -761,8 +777,8 @@
         function saveBook() {
             const location = getCurrentLocation();
             
-            if (!location.room || !location.shelf) {
-                alert('少なくとも部屋と本棚を選択してください。');
+            if (!location.room) {
+                alert('部屋を選択してください。');
                 return;
             }
             
@@ -772,7 +788,11 @@
             const bookData = {
                 isbn: isbnDisplay.textContent.replace('ISBN: ', ''),
                 title: bookTitle,
-                location: location.fullLocation,
+                room: location.room,
+                shelf: location.shelf || '未指定',
+                level: location.level || '未指定', 
+                detail: location.detail || '',
+                fullLocation: location.fullLocation,
                 addedAt: new Date().toISOString(),
                 addedBy: currentUser?.email || 'unknown'
             };
@@ -780,7 +800,7 @@
             console.log('保存予定の書籍データ:', bookData);
             
             // 仮の成功メッセージ（実際のGAS連携時に置き換え）
-            alert(`蔵書に追加されました！\n\n📖 ${bookData.title}\n📍 ${bookData.location}\n👤 ${bookData.addedBy}\n🕒 ${new Date(bookData.addedAt).toLocaleString('ja-JP')}\n\n※現在は仮の動作です。Google Apps Script連携後に実際に保存されます。`);
+            alert(`蔵書に追加されました！\n\n📖 ${bookData.title}\n📍 ${bookData.fullLocation}\n👤 ${bookData.addedBy}\n🕒 ${new Date(bookData.addedAt).toLocaleString('ja-JP')}\n\n※現在は仮の動作です。Google Apps Script連携後に実際に保存されます。`);
         }
 
         // イベントリスナー
