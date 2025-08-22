@@ -151,7 +151,7 @@
         let currentUser = null;
         let currentBookData = null;
 
-        // Google認証機能（iframe方式で確実に動作）
+        // Google認証機能（シンプルで確実な方式）
         async function authenticateWithGoogle() {
             try {
                 authButton.disabled = true;
@@ -161,34 +161,33 @@
                 console.log('APPS_SCRIPT_URL:', APPS_SCRIPT_URL);
                 
                 if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
-                    throw new Error('APPS_SCRIPT_URLが設定されていません。Google Apps ScriptのURLを設定してください。');
+                    throw new Error('APPS_SCRIPT_URLが設定されていません。');
                 }
                 
-                // iframe を使用してApps Scriptにアクセス
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.src = APPS_SCRIPT_URL + '?action=authenticate';
-                document.body.appendChild(iframe);
+                // 短時間でタイムアウトするように設定
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒でタイムアウト
                 
-                // iframe からのメッセージを待機
-                const result = await new Promise((resolve, reject) => {
-                    let timeout = setTimeout(() => {
-                        reject(new Error('認証がタイムアウトしました'));
-                    }, 10000);
-                    
-                    window.addEventListener('message', function handler(event) {
-                        if (event.data && event.data.type === 'cors_test') {
-                            clearTimeout(timeout);
-                            window.removeEventListener('message', handler);
-                            
-                            // iframe が読み込まれたので、fetch を再試行
-                            fetchAuthentication().then(resolve).catch(reject);
-                        }
-                    });
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'authenticate'
+                    }),
+                    signal: controller.signal
                 });
                 
-                // cleanup
-                document.body.removeChild(iframe);
+                clearTimeout(timeoutId);
+                console.log('レスポンス受信:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                console.log('認証結果:', result);
                 
                 if (result.success) {
                     isAuthenticated = true;
@@ -199,14 +198,18 @@
                 }
                 
             } catch (error) {
-                console.error('認証エラー詳細:', error);
+                console.error('認証エラー:', error);
                 
                 let errorMessage = '認証に失敗しました。\n\n';
                 
-                if (error.message.includes('タイムアウト')) {
-                    errorMessage += 'Google Apps Scriptへの接続がタイムアウトしました。\n\n・ネットワーク接続を確認\n・Google Apps Scriptが正しくデプロイされているか確認';
-                } else if (error.message.includes('CORS')) {
-                    errorMessage += 'CORS エラー: Google Apps Scriptを再デプロイしてください。';
+                if (error.name === 'AbortError') {
+                    errorMessage += '⏱️ 接続タイムアウト（15秒）\n\n原因の可能性:\n・Google Apps Scriptの処理が重い\n・ネットワークが遅い\n・Apps Scriptの権限設定の問題\n\n対策:\n・しばらく待ってから再試行\n・Wi-Fi接続を確認';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMessage += '🌐 ネットワークエラー\n\nCORS（Cross-Origin）の問題の可能性があります。\n\n対策:\n・Google Apps Scriptを再デプロイ\n・「すべてのユーザー」でアクセス許可を確認';
+                } else if (error.message.includes('HTTP 403')) {
+                    errorMessage += '🔒 アクセス権限エラー\n\nApps Scriptのデプロイ設定を確認:\n・「すべてのユーザー」でアクセス許可\n・ウェブアプリとして正しくデプロイされているか';
+                } else if (error.message.includes('HTTP 404')) {
+                    errorMessage += '❌ URLが見つかりません\n\nApps ScriptのURLを確認:\n・正しいデプロイURLか\n・末尾が /exec になっているか';
                 } else {
                     errorMessage += `詳細: ${error.message}`;
                 }
@@ -216,26 +219,6 @@
             
             authButton.disabled = false;
             authButton.textContent = 'Googleアカウントで認証';
-        }
-        
-        // fetch による認証実行
-        async function fetchAuthentication() {
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'cors',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'authenticate'
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
-            }
-            
-            return await response.json();
         }
 
         // 認証成功時の表示
