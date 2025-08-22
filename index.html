@@ -133,7 +133,7 @@
 
     <script>
         // Google Apps Script ウェブアプリのURL（後で設定）
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQ4t6qlFLY9uvfDX2lURDLb9-WSZjYuvk8XhDSckJZmDuCcGIrReU6AUpjLPuwI8Oaqg/exec';
+        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
         
         const video = document.getElementById('video');
         const startButton = document.getElementById('startButton');
@@ -396,13 +396,331 @@
                 <p><strong>出版日:</strong> ${publishedDate}</p>
                 <p><strong>ISBN:</strong> ${book.isbn}</p>
                 ${thumbnail ? `<img src="${thumbnail}" alt="書籍画像" style="max-width: 100px;">` : ''}
+                
+                <!-- 本棚位置入力セクション -->
+                <div id="locationSection" style="margin-top: 15px; padding: 15px; background: #f0f8ff; border-radius: 6px; ${isAuthenticated ? '' : 'display: none;'}">
+                    <h5>📍 本棚位置を選択</h5>
+                    
+                    <!-- 階層選択式 -->
+                    <div style="margin: 10px 0;">
+                        <label><strong>部屋:</strong></label>
+                        <select id="roomSelect" onchange="updateShelfOptions()" style="margin: 5px; padding: 5px; width: 100%;">
+                            <option value="">部屋を選択</option>
+                            <option value="リビング">リビング</option>
+                            <option value="寝室">寝室</option>
+                            <option value="書斎">書斎</option>
+                            <option value="子供部屋">子供部屋</option>
+                            <option value="廊下">廊下</option>
+                            <option value="その他">その他</option>
+                        </select>
+                    </div>
+                    
+                    <div style="margin: 10px 0;">
+                        <label><strong>本棚:</strong></label>
+                        <select id="shelfSelect" onchange="updateLevelOptions()" style="margin: 5px; padding: 5px; width: 100%;">
+                            <option value="">本棚を選択</option>
+                        </select>
+                    </div>
+                    
+                    <div style="margin: 10px 0;">
+                        <label><strong>段:</strong></label>
+                        <select id="levelSelect" style="margin: 5px; padding: 5px; width: 100%;">
+                            <option value="">段を選択</option>
+                        </select>
+                    </div>
+                    
+                    <div style="margin: 10px 0;">
+                        <label><strong>詳細位置:</strong></label>
+                        <input type="text" id="detailLocation" placeholder="左から3番目、奥など" style="margin: 5px; padding: 5px; width: 100%;">
+                    </div>
+                    
+                    <!-- QRコード読み取りオプション -->
+                    <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-radius: 4px;">
+                        <h6>🏷️ QRコード読み取り（推奨）</h6>
+                        <button onclick="scanLocationQR()" style="background: #17a2b8; color: white; padding: 8px 16px; border: none; border-radius: 4px;">
+                            📱 本棚のQRコードを読み取り
+                        </button>
+                        <p style="font-size: 12px; margin: 5px 0;">事前に本棚にQRコードを貼っておくと便利です</p>
+                    </div>
+                    
+                    <!-- 位置情報プレビュー -->
+                    <div style="margin: 10px 0; padding: 10px; background: #e8f5e8; border-radius: 4px;">
+                        <strong>位置情報プレビュー:</strong>
+                        <div id="locationPreview" style="font-family: monospace; color: #666;">
+                            位置を選択してください
+                        </div>
+                    </div>
+                </div>
+                
                 <div style="margin-top: 10px;">
                     ${saveButtonHtml}
                 </div>
             `;
+            
+            // 位置選択の変更時にプレビューを更新
+            const selects = ['roomSelect', 'shelfSelect', 'levelSelect'];
+            selects.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('change', updateLocationPreview);
+                }
+            });
+            
+            const detailInput = document.getElementById('detailLocation');
+            if (detailInput) {
+                detailInput.addEventListener('input', updateLocationPreview);
+            }
         }
 
-        // 認証が必要な旨を表示
+        // 本棚位置管理機能
+        
+        // 本棚の設定データ（カスタマイズ可能）
+        const SHELF_CONFIG = {
+            'リビング': {
+                'A棚': ['1段目', '2段目', '3段目', '4段目'],
+                'B棚': ['1段目', '2段目', '3段目'],
+                'テレビ台': ['上段', '下段']
+            },
+            '寝室': {
+                'ベッドサイド棚': ['上段', '下段'],
+                'クローゼット棚': ['1段目', '2段目', '3段目']
+            },
+            '書斎': {
+                'デスク棚': ['1段目', '2段目', '3段目'],
+                '壁面書棚': ['1段目', '2段目', '3段目', '4段目', '5段目']
+            },
+            '子供部屋': {
+                '学習机棚': ['上段', '下段'],
+                '絵本棚': ['1段目', '2段目', '3段目']
+            },
+            '廊下': {
+                '廊下棚': ['1段目', '2段目']
+            },
+            'その他': {
+                'カスタム棚': ['上段', '中段', '下段']
+            }
+        };
+
+        // 本棚選択肢を更新
+        function updateShelfOptions() {
+            const roomSelect = document.getElementById('roomSelect');
+            const shelfSelect = document.getElementById('shelfSelect');
+            const levelSelect = document.getElementById('levelSelect');
+            
+            if (!roomSelect || !shelfSelect || !levelSelect) return;
+            
+            const selectedRoom = roomSelect.value;
+            
+            // 本棚選択肢をリセット
+            shelfSelect.innerHTML = '<option value="">本棚を選択</option>';
+            levelSelect.innerHTML = '<option value="">段を選択</option>';
+            
+            if (selectedRoom && SHELF_CONFIG[selectedRoom]) {
+                Object.keys(SHELF_CONFIG[selectedRoom]).forEach(shelf => {
+                    const option = document.createElement('option');
+                    option.value = shelf;
+                    option.textContent = shelf;
+                    shelfSelect.appendChild(option);
+                });
+            }
+            
+            updateLocationPreview();
+        }
+
+        // 段選択肢を更新
+        function updateLevelOptions() {
+            const roomSelect = document.getElementById('roomSelect');
+            const shelfSelect = document.getElementById('shelfSelect');
+            const levelSelect = document.getElementById('levelSelect');
+            
+            if (!roomSelect || !shelfSelect || !levelSelect) return;
+            
+            const selectedRoom = roomSelect.value;
+            const selectedShelf = shelfSelect.value;
+            
+            // 段選択肢をリセット
+            levelSelect.innerHTML = '<option value="">段を選択</option>';
+            
+            if (selectedRoom && selectedShelf && SHELF_CONFIG[selectedRoom][selectedShelf]) {
+                SHELF_CONFIG[selectedRoom][selectedShelf].forEach(level => {
+                    const option = document.createElement('option');
+                    option.value = level;
+                    option.textContent = level;
+                    levelSelect.appendChild(option);
+                });
+            }
+            
+            updateLocationPreview();
+        }
+
+        // 位置情報プレビューを更新
+        function updateLocationPreview() {
+            const preview = document.getElementById('locationPreview');
+            if (!preview) return;
+            
+            const room = document.getElementById('roomSelect')?.value || '';
+            const shelf = document.getElementById('shelfSelect')?.value || '';
+            const level = document.getElementById('levelSelect')?.value || '';
+            const detail = document.getElementById('detailLocation')?.value || '';
+            
+            const parts = [room, shelf, level, detail].filter(part => part.trim() !== '');
+            
+            if (parts.length === 0) {
+                preview.textContent = '位置を選択してください';
+                preview.style.color = '#666';
+            } else {
+                preview.textContent = parts.join(' - ');
+                preview.style.color = '#2e7d32';
+            }
+        }
+
+        // QRコードで位置情報を読み取り
+        async function scanLocationQR() {
+            try {
+                showResult('QRコード読み取り準備中...');
+                
+                // 既存のカメラを停止
+                if (isScanning) {
+                    stopBarcodeDetection();
+                }
+                
+                // QRコード読み取りモードで再開
+                await startQRCodeDetection();
+                
+            } catch (error) {
+                console.error('QRコード読み取りエラー:', error);
+                showError('QRコード読み取りを開始できませんでした。');
+            }
+        }
+
+        // QRコード読み取り用の関数
+        async function startQRCodeDetection() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                video.srcObject = stream;
+                isScanning = true;
+                
+                showResult('本棚のQRコードにカメラを向けてください...');
+                
+                if ('BarcodeDetector' in window) {
+                    useQRCodeDetector();
+                } else {
+                    useQuaggaForQR();
+                }
+                
+            } catch (error) {
+                showError('カメラにアクセスできませんでした。');
+            }
+        }
+
+        // QRコード検出（BarcodeDetector API）
+        async function useQRCodeDetector() {
+            const barcodeDetector = new BarcodeDetector({
+                formats: ['qr_code']
+            });
+
+            const detectQRCodes = async () => {
+                if (!isScanning) return;
+
+                try {
+                    const barcodes = await barcodeDetector.detect(video);
+                    
+                    if (barcodes.length > 0) {
+                        const qrData = barcodes[0].rawValue;
+                        handleQRCodeDetected(qrData);
+                    }
+                } catch (error) {
+                    console.error('QRコード検出エラー:', error);
+                }
+
+                if (isScanning) {
+                    requestAnimationFrame(detectQRCodes);
+                }
+            };
+
+            video.addEventListener('loadedmetadata', () => {
+                detectQRCodes();
+            });
+        }
+
+        // QuaggaJS でQRコード読み取り
+        function useQuaggaForQR() {
+            // QuaggaJSはQRコード対応が限定的なので、代替メッセージ
+            showError('QRコード読み取りは一部のブラウザでのみ対応しています。手動で位置を選択してください。');
+            stopBarcodeDetection();
+        }
+
+        // QRコード検出時の処理
+        function handleQRCodeDetected(qrData) {
+            console.log('QRコード検出:', qrData);
+            
+            try {
+                // QRコードデータを解析（例：リビング-A棚-2段目）
+                const locationParts = qrData.split('-');
+                
+                if (locationParts.length >= 2) {
+                    // 位置情報を自動入力
+                    const roomSelect = document.getElementById('roomSelect');
+                    const shelfSelect = document.getElementById('shelfSelect');
+                    const levelSelect = document.getElementById('levelSelect');
+                    
+                    if (roomSelect && locationParts[0]) {
+                        roomSelect.value = locationParts[0];
+                        updateShelfOptions();
+                        
+                        setTimeout(() => {
+                            if (shelfSelect && locationParts[1]) {
+                                shelfSelect.value = locationParts[1];
+                                updateLevelOptions();
+                                
+                                setTimeout(() => {
+                                    if (levelSelect && locationParts[2]) {
+                                        levelSelect.value = locationParts[2];
+                                        updateLocationPreview();
+                                    }
+                                }, 100);
+                            }
+                        }, 100);
+                    }
+                    
+                    showResult(`QRコード読み取り成功: ${qrData}`);
+                } else {
+                    showResult(`QRコード読み取り: ${qrData}`);
+                }
+                
+                // カメラを停止
+                setTimeout(() => {
+                    stopBarcodeDetection();
+                }, 1500);
+                
+            } catch (error) {
+                showError('QRコードデータの解析に失敗しました。');
+                stopBarcodeDetection();
+            }
+        }
+
+        // 現在の位置情報を取得
+        function getCurrentLocation() {
+            const room = document.getElementById('roomSelect')?.value || '';
+            const shelf = document.getElementById('shelfSelect')?.value || '';
+            const level = document.getElementById('levelSelect')?.value || '';
+            const detail = document.getElementById('detailLocation')?.value || '';
+            
+            return {
+                room,
+                shelf,
+                level,
+                detail,
+                fullLocation: [room, shelf, level, detail].filter(part => part.trim() !== '').join(' - ')
+            };
+        }
         function showAuthRequired() {
             alert('蔵書に追加するには、家族のGoogleアカウントで認証が必要です。\n上部の「Googleアカウントで認証」ボタンを押してください。');
         }
@@ -441,7 +759,28 @@
 
         // 蔵書に追加（後でGoogle Apps Scriptと連携）
         function saveBook() {
-            alert('蔵書への追加機能は後で実装予定です！\n（Google Apps Scriptと連携）');
+            const location = getCurrentLocation();
+            
+            if (!location.room || !location.shelf) {
+                alert('少なくとも部屋と本棚を選択してください。');
+                return;
+            }
+            
+            // 現在表示されている書籍情報を取得
+            const bookTitle = document.querySelector('#bookInfo h4')?.textContent?.replace('📖 ', '') || '';
+            
+            const bookData = {
+                isbn: isbnDisplay.textContent.replace('ISBN: ', ''),
+                title: bookTitle,
+                location: location.fullLocation,
+                addedAt: new Date().toISOString(),
+                addedBy: currentUser?.email || 'unknown'
+            };
+            
+            console.log('保存予定の書籍データ:', bookData);
+            
+            // 仮の成功メッセージ（実際のGAS連携時に置き換え）
+            alert(`蔵書に追加されました！\n\n📖 ${bookData.title}\n📍 ${bookData.location}\n👤 ${bookData.addedBy}\n🕒 ${new Date(bookData.addedAt).toLocaleString('ja-JP')}\n\n※現在は仮の動作です。Google Apps Script連携後に実際に保存されます。`);
         }
 
         // イベントリスナー
