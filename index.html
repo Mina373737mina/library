@@ -78,11 +78,39 @@
             text-align: center;
             color: #666;
         }
+        .auth-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            border-left: 4px solid #2196f3;
+        }
+        .auth-success {
+            background: #e8f5e8;
+            border-left-color: #4caf50;
+        }
+        .auth-error {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        .user-info {
+            font-size: 14px;
+            color: #666;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📚 本のバーコード読み取り</h1>
+        
+        <!-- 認証セクション -->
+        <div id="authSection" class="auth-section">
+            <h3>🔐 家族認証</h3>
+            <p>蔵書管理機能を使用するには、家族のGoogleアカウントでログインが必要です。</p>
+            <button id="authButton">Googleアカウントで認証</button>
+            <div id="authStatus" style="display: none;"></div>
+        </div>
         
         <video id="video" autoplay playsinline></video>
         
@@ -104,17 +132,84 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
     <script>
+        // Google Apps Script ウェブアプリのURL（後で設定）
+        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+        
         const video = document.getElementById('video');
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const result = document.getElementById('result');
         const isbnDisplay = document.getElementById('isbn');
         const bookInfo = document.getElementById('bookInfo');
+        const authButton = document.getElementById('authButton');
+        const authStatus = document.getElementById('authStatus');
+        const authSection = document.getElementById('authSection');
         
         let stream = null;
         let isScanning = false;
+        let isAuthenticated = false;
+        let currentUser = null;
 
-        // バーコード検出のメイン関数
+        // Google認証機能
+        async function authenticateWithGoogle() {
+            try {
+                authButton.disabled = true;
+                authButton.textContent = '認証中...';
+                
+                // Google Apps Scriptに認証リクエスト
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'authenticate'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    isAuthenticated = true;
+                    currentUser = result.user;
+                    showAuthSuccess(result.user);
+                } else {
+                    showAuthError(result.error);
+                }
+            } catch (error) {
+                console.error('認証エラー:', error);
+                showAuthError('認証に失敗しました。ネットワーク接続を確認してください。');
+            }
+            
+            authButton.disabled = false;
+            authButton.textContent = 'Googleアカウントで認証';
+        }
+
+        // 認証成功時の表示
+        function showAuthSuccess(user) {
+            authSection.className = 'auth-section auth-success';
+            authStatus.style.display = 'block';
+            authStatus.innerHTML = `
+                <h4>✅ 認証成功!</h4>
+                <div class="user-info">
+                    <p><strong>ユーザー:</strong> ${user.email}</p>
+                    <p><strong>認証時刻:</strong> ${new Date(user.timestamp).toLocaleString('ja-JP')}</p>
+                </div>
+                <p>蔵書管理機能が利用可能になりました。</p>
+            `;
+            authButton.style.display = 'none';
+        }
+
+        // 認証エラー時の表示
+        function showAuthError(errorMessage) {
+            authSection.className = 'auth-section auth-error';
+            authStatus.style.display = 'block';
+            authStatus.innerHTML = `
+                <h4>❌ 認証失敗</h4>
+                <p>${errorMessage}</p>
+                <p>家族のGoogleアカウントでアクセスしてください。</p>
+            `;
+        }
         async function startBarcodeDetection() {
             try {
                 // カメラアクセスを要求
@@ -227,44 +322,89 @@
             return /^(97[89])?\d{9}[\dX]$/.test(code);
         }
 
-        // 書籍情報を取得（Google Books API使用）
+        // 書籍情報を取得（認証済みの場合はApps Scriptを使用）
         async function getBookInfo(isbn) {
             bookInfo.style.display = 'block';
             bookInfo.innerHTML = '<div class="loading">書籍情報を取得中...</div>';
             
             try {
-                const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
-                const data = await response.json();
+                let bookData;
                 
-                if (data.items && data.items.length > 0) {
-                    const book = data.items[0].volumeInfo;
-                    displayBookInfo(book);
+                if (isAuthenticated && APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE') {
+                    // Google Apps Script経由で取得（認証済み）
+                    const response = await fetch(APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'getBookInfo',
+                            isbn: isbn
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        bookData = result.book;
+                    } else {
+                        throw new Error(result.error);
+                    }
                 } else {
-                    bookInfo.innerHTML = '<div>書籍情報が見つかりませんでした。</div>';
+                    // 直接Google Books APIで取得（認証なし）
+                    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+                    const data = await response.json();
+                    
+                    if (data.items && data.items.length > 0) {
+                        const book = data.items[0].volumeInfo;
+                        bookData = {
+                            isbn: isbn,
+                            title: book.title || '不明',
+                            authors: book.authors || ['不明'],
+                            publisher: book.publisher || '不明',
+                            publishedDate: book.publishedDate || '不明',
+                            thumbnail: book.imageLinks ? book.imageLinks.thumbnail : null
+                        };
+                    } else {
+                        throw new Error('書籍情報が見つかりませんでした');
+                    }
                 }
+                
+                displayBookInfo(bookData);
+                
             } catch (error) {
                 console.error('書籍情報取得エラー:', error);
-                bookInfo.innerHTML = '<div>書籍情報の取得に失敗しました。</div>';
+                bookInfo.innerHTML = '<div>書籍情報の取得に失敗しました: ' + error.message + '</div>';
             }
         }
 
         // 書籍情報を表示
         function displayBookInfo(book) {
-            const authors = book.authors ? book.authors.join(', ') : '不明';
+            const authors = Array.isArray(book.authors) ? book.authors.join(', ') : book.authors || '不明';
             const publisher = book.publisher || '不明';
             const publishedDate = book.publishedDate || '不明';
-            const thumbnail = book.imageLinks ? book.imageLinks.thumbnail : '';
+            const thumbnail = book.thumbnail || '';
+            
+            const saveButtonHtml = isAuthenticated ? 
+                '<button onclick="saveBook()" style="background: #4caf50;">📚 蔵書に追加</button>' :
+                '<button onclick="showAuthRequired()" style="background: #ff9800;">🔐 認証して蔵書に追加</button>';
             
             bookInfo.innerHTML = `
                 <h4>📖 ${book.title || '不明'}</h4>
                 <p><strong>著者:</strong> ${authors}</p>
                 <p><strong>出版社:</strong> ${publisher}</p>
                 <p><strong>出版日:</strong> ${publishedDate}</p>
+                <p><strong>ISBN:</strong> ${book.isbn}</p>
                 ${thumbnail ? `<img src="${thumbnail}" alt="書籍画像" style="max-width: 100px;">` : ''}
                 <div style="margin-top: 10px;">
-                    <button onclick="saveBook()">📚 蔵書に追加</button>
+                    ${saveButtonHtml}
                 </div>
             `;
+        }
+
+        // 認証が必要な旨を表示
+        function showAuthRequired() {
+            alert('蔵書に追加するには、家族のGoogleアカウントで認証が必要です。\n上部の「Googleアカウントで認証」ボタンを押してください。');
         }
 
         // カメラ停止
@@ -307,6 +447,7 @@
         // イベントリスナー
         startButton.addEventListener('click', startBarcodeDetection);
         stopButton.addEventListener('click', stopBarcodeDetection);
+        authButton.addEventListener('click', authenticateWithGoogle);
 
         // ページ読み込み時の初期化
         document.addEventListener('DOMContentLoaded', function() {
