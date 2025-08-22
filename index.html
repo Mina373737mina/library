@@ -132,8 +132,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
     <script>
-        // Google Apps Script ウェブアプリのURL（後で設定）
-        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+        // Google Apps Script ウェブアプリのURL（デプロイ後に設定）
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQ4t6qlFLY9uvfDX2lURDLb9-WSZjYuvk8XhDSckJZmDuCcGIrReU6AUpjLPuwI8Oaqg/exec';
         
         const video = document.getElementById('video');
         const startButton = document.getElementById('startButton');
@@ -149,6 +149,7 @@
         let isScanning = false;
         let isAuthenticated = false;
         let currentUser = null;
+        let currentBookData = null;
 
         // Google認証機能
         async function authenticateWithGoogle() {
@@ -380,6 +381,9 @@
 
         // 書籍情報を表示
         function displayBookInfo(book) {
+            // 現在の書籍データを保存
+            currentBookData = book;
+            
             const authors = Array.isArray(book.authors) ? book.authors.join(', ') : book.authors || '不明';
             const publisher = book.publisher || '不明';
             const publishedDate = book.publishedDate || '不明';
@@ -387,7 +391,7 @@
             
             const saveButtonHtml = isAuthenticated ? 
                 '<button onclick="saveBook()" style="background: #4caf50;">📚 蔵書に追加</button>' :
-                '<button onclick="saveBook()" style="background: #ff9800;">📚 蔵書に追加（テスト）</button>';
+                '<button onclick="showAuthRequired()" style="background: #ff9800;">🔐 認証して蔵書に追加</button>';
             
             bookInfo.innerHTML = `
                 <h4>📖 ${book.title || '不明'}</h4>
@@ -398,13 +402,13 @@
                 ${thumbnail ? `<img src="${thumbnail}" alt="書籍画像" style="max-width: 100px;">` : ''}
                 
                 <!-- 本棚位置入力セクション -->
-                <div id="locationSection" style="margin-top: 15px; padding: 15px; background: #f0f8ff; border-radius: 6px;">
+                <div id="locationSection" style="margin-top: 15px; padding: 15px; background: #f0f8ff; border-radius: 6px; ${isAuthenticated ? '' : 'opacity: 0.5;'}">
                     <h5>📍 本棚位置を選択</h5>
                     
                     <!-- 階層選択式 -->
                     <div style="margin: 10px 0;">
                         <label><strong>部屋:</strong></label>
-                        <select id="roomSelect" onchange="updateShelfOptions()" style="margin: 5px; padding: 5px; width: 100%;">
+                        <select id="roomSelect" onchange="updateShelfOptions()" style="margin: 5px; padding: 5px; width: 100%;" ${isAuthenticated ? '' : 'disabled'}>
                             <option value="">部屋を選択</option>
                             <option value="廊下">廊下</option>
                             <option value="リビング棚">リビング棚</option>
@@ -420,27 +424,27 @@
                     
                     <div style="margin: 10px 0;">
                         <label><strong>本棚（任意）:</strong></label>
-                        <select id="shelfSelect" onchange="updateLevelOptions()" style="margin: 5px; padding: 5px; width: 100%;">
+                        <select id="shelfSelect" onchange="updateLevelOptions()" style="margin: 5px; padding: 5px; width: 100%;" ${isAuthenticated ? '' : 'disabled'}>
                             <option value="">本棚を選択（任意）</option>
                         </select>
                     </div>
                     
                     <div style="margin: 10px 0;">
                         <label><strong>段（任意）:</strong></label>
-                        <select id="levelSelect" style="margin: 5px; padding: 5px; width: 100%;">
+                        <select id="levelSelect" style="margin: 5px; padding: 5px; width: 100%;" ${isAuthenticated ? '' : 'disabled'}>
                             <option value="">段を選択（任意）</option>
                         </select>
                     </div>
                     
                     <div style="margin: 10px 0;">
                         <label><strong>補足:</strong></label>
-                        <input type="text" id="detailLocation" placeholder="手前、奥、上から2冊目など" style="margin: 5px; padding: 5px; width: 100%;">
+                        <input type="text" id="detailLocation" placeholder="手前、奥、上から2冊目など" style="margin: 5px; padding: 5px; width: 100%;" ${isAuthenticated ? '' : 'disabled'}>
                     </div>
                     
                     <!-- QRコード読み取りオプション -->
-                    <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-radius: 4px;">
+                    <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-radius: 4px; ${isAuthenticated ? '' : 'opacity: 0.5;'}">
                         <h6>🏷️ QRコード読み取り（推奨）</h6>
-                        <button onclick="scanLocationQR()" style="background: #17a2b8; color: white; padding: 8px 16px; border: none; border-radius: 4px;">
+                        <button onclick="scanLocationQR()" style="background: #17a2b8; color: white; padding: 8px 16px; border: none; border-radius: 4px;" ${isAuthenticated ? '' : 'disabled'}>
                             📱 本棚のQRコードを読み取り
                         </button>
                         <p style="font-size: 12px; margin: 5px 0;">事前に本棚にQRコードを貼っておくと便利です</p>
@@ -450,9 +454,11 @@
                     <div style="margin: 10px 0; padding: 10px; background: #e8f5e8; border-radius: 4px;">
                         <strong>位置情報プレビュー:</strong>
                         <div id="locationPreview" style="font-family: monospace; color: #666;">
-                            位置を選択してください
+                            ${isAuthenticated ? '位置を選択してください' : '認証後に位置選択が可能になります'}
                         </div>
                     </div>
+                    
+                    ${!isAuthenticated ? '<p style="color: #ff6b35; font-size: 14px; text-align: center;">🔐 蔵書追加には家族認証が必要です</p>' : ''}
                 </div>
                 
                 <div style="margin-top: 10px;">
@@ -460,18 +466,20 @@
                 </div>
             `;
             
-            // 位置選択の変更時にプレビューを更新
-            const selects = ['roomSelect', 'shelfSelect', 'levelSelect'];
-            selects.forEach(id => {
-                const element = document.getElementById(id);
-                if (element) {
-                    element.addEventListener('change', updateLocationPreview);
+            // 認証済みの場合のみイベントリスナーを設定
+            if (isAuthenticated) {
+                const selects = ['roomSelect', 'shelfSelect', 'levelSelect'];
+                selects.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.addEventListener('change', updateLocationPreview);
+                    }
+                });
+                
+                const detailInput = document.getElementById('detailLocation');
+                if (detailInput) {
+                    detailInput.addEventListener('input', updateLocationPreview);
                 }
-            });
-            
-            const detailInput = document.getElementById('detailLocation');
-            if (detailInput) {
-                detailInput.addEventListener('input', updateLocationPreview);
             }
         }
 
@@ -773,8 +781,13 @@
             isbnDisplay.textContent = message;
         }
 
-        // 蔵書に追加（後でGoogle Apps Scriptと連携）
-        function saveBook() {
+        // 蔵書に追加（Google Apps Scriptと連携）
+        async function saveBook() {
+            if (!isAuthenticated) {
+                showAuthRequired();
+                return;
+            }
+            
             const location = getCurrentLocation();
             
             if (!location.room) {
@@ -782,25 +795,62 @@
                 return;
             }
             
-            // 現在表示されている書籍情報を取得
-            const bookTitle = document.querySelector('#bookInfo h4')?.textContent?.replace('📖 ', '') || '';
-            
-            const bookData = {
-                isbn: isbnDisplay.textContent.replace('ISBN: ', ''),
-                title: bookTitle,
-                room: location.room,
-                shelf: location.shelf || '未指定',
-                level: location.level || '未指定', 
-                detail: location.detail || '',
-                fullLocation: location.fullLocation,
-                addedAt: new Date().toISOString(),
-                addedBy: currentUser?.email || 'unknown'
-            };
-            
-            console.log('保存予定の書籍データ:', bookData);
-            
-            // 仮の成功メッセージ（実際のGAS連携時に置き換え）
-            alert(`蔵書に追加されました！\n\n📖 ${bookData.title}\n📍 ${bookData.fullLocation}\n👤 ${bookData.addedBy}\n🕒 ${new Date(bookData.addedAt).toLocaleString('ja-JP')}\n\n※現在は仮の動作です。Google Apps Script連携後に実際に保存されます。`);
+            try {
+                // Google Apps Scriptに書籍データを送信
+                const bookData = {
+                    isbn: currentBookData.isbn,
+                    title: currentBookData.title,
+                    authors: currentBookData.authors,
+                    publisher: currentBookData.publisher,
+                    publishedDate: currentBookData.publishedDate,
+                    thumbnail: currentBookData.thumbnail,
+                    room: location.room,
+                    shelf: location.shelf || '未指定',
+                    level: location.level || '未指定', 
+                    detail: location.detail || '',
+                    fullLocation: location.fullLocation
+                };
+                
+                // 保存中の表示
+                const saveButton = document.querySelector('#bookInfo button');
+                const originalText = saveButton.textContent;
+                saveButton.textContent = '保存中...';
+                saveButton.disabled = true;
+                
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'addBook',
+                        book: bookData
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`✅ 蔵書に追加されました！\n\n📖 ${bookData.title}\n📍 ${bookData.fullLocation}\n👤 ${result.addedBy}\n🕒 ${new Date(result.addedAt).toLocaleString('ja-JP')}\n\n📊 スプレッドシートでデータを確認できます`);
+                } else {
+                    throw new Error(result.error);
+                }
+                
+                // ボタンを元に戻す
+                saveButton.textContent = originalText;
+                saveButton.disabled = false;
+                
+            } catch (error) {
+                console.error('保存エラー:', error);
+                alert(`❌ 保存に失敗しました\n\nエラー: ${error.message}\n\n以下を確認してください：\n・Google Apps ScriptのURLが正しく設定されているか\n・家族認証が有効か\n・ネットワーク接続`);
+                
+                // ボタンを元に戻す
+                const saveButton = document.querySelector('#bookInfo button');
+                if (saveButton) {
+                    saveButton.textContent = '📚 蔵書に追加';
+                    saveButton.disabled = false;
+                }
+            }
         }
 
         // イベントリスナー
