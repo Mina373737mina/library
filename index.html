@@ -133,7 +133,7 @@
 
     <script>
         // Google Apps Script ウェブアプリのURL（デプロイ後に設定）
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQ4t6qlFLY9uvfDX2lURDLb9-WSZjYuvk8XhDSckJZmDuCcGIrReU6AUpjLPuwI8Oaqg/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyUI5LGXhWNj8YiJaLZrPs-2nZmmVxgKenADVnOFOWtUr5RWzAu9nBYvPheZjU--TWbhA/exec';
         
         const video = document.getElementById('video');
         const startButton = document.getElementById('startButton');
@@ -151,15 +151,24 @@
         let currentUser = null;
         let currentBookData = null;
 
-        // Google認証機能
+        // Google認証機能（CORS対応版）
         async function authenticateWithGoogle() {
             try {
                 authButton.disabled = true;
                 authButton.textContent = '認証中...';
                 
-                // Google Apps Scriptに認証リクエスト
+                // デバッグ情報を表示
+                console.log('認証開始');
+                console.log('APPS_SCRIPT_URL:', APPS_SCRIPT_URL);
+                
+                if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+                    throw new Error('APPS_SCRIPT_URLが設定されていません。Google Apps ScriptのURLを設定してください。');
+                }
+                
+                // Google Apps Scriptに認証リクエスト（CORS対応）
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
+                    mode: 'cors',
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -168,18 +177,40 @@
                     })
                 });
                 
+                console.log('レスポンス受信:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+                }
+                
                 const result = await response.json();
+                console.log('認証結果:', result);
                 
                 if (result.success) {
                     isAuthenticated = true;
                     currentUser = result.user;
                     showAuthSuccess(result.user);
                 } else {
-                    showAuthError(result.error);
+                    showAuthError(result.error || '認証に失敗しました');
                 }
             } catch (error) {
-                console.error('認証エラー:', error);
-                showAuthError('認証に失敗しました。ネットワーク接続を確認してください。');
+                console.error('認証エラー詳細:', error);
+                
+                let errorMessage = '認証に失敗しました。\n\n';
+                
+                if (error.message.includes('CORS')) {
+                    errorMessage += 'CORS エラー: Google Apps Scriptを再デプロイしてください。\n\n手順:\n1. Apps Scriptで「新しいデプロイ」\n2. 「すべてのユーザー」でアクセス許可\n3. 新しいURLをアプリに設定';
+                } else if (error.message.includes('APPS_SCRIPT_URL')) {
+                    errorMessage += error.message;
+                } else if (error.message.includes('HTTP Error')) {
+                    errorMessage += `サーバーエラー: ${error.message}\n\nGoogle Apps Scriptのデプロイ設定を確認してください。`;
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMessage += 'ネットワークエラー: Google Apps ScriptのURLが正しくないか、ネットワーク接続を確認してください。';
+                } else {
+                    errorMessage += `詳細: ${error.message}`;
+                }
+                
+                showAuthError(errorMessage);
             }
             
             authButton.disabled = false;
