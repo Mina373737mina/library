@@ -387,7 +387,7 @@
             
             const saveButtonHtml = isAuthenticated ? 
                 '<button onclick="saveBook()" style="background: #4caf50;">📚 蔵書に追加</button>' :
-                '<button onclick="showAuthRequired()" style="background: #ff9800;">🔐 認証して蔵書に追加</button>';
+                '<button onclick="saveBook()" style="background: #ff9800;">📚 蔵書に追加（テスト）</button>';
             
             bookInfo.innerHTML = `
                 <h4>📖 ${book.title || '不明'}</h4>
@@ -398,7 +398,7 @@
                 ${thumbnail ? `<img src="${thumbnail}" alt="書籍画像" style="max-width: 100px;">` : ''}
                 
                 <!-- 本棚位置入力セクション -->
-                <div id="locationSection" style="margin-top: 15px; padding: 15px; background: #f0f8ff; border-radius: 6px; ${isAuthenticated ? '' : 'display: none;'}">
+                <div id="locationSection" style="margin-top: 15px; padding: 15px; background: #f0f8ff; border-radius: 6px;">
                     <h5>📍 本棚位置を選択</h5>
                     
                     <!-- 階層選択式 -->
