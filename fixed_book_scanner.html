@@ -179,6 +179,7 @@
         <div class="controls">
             <button id="startButton">カメラ開始</button>
             <button id="stopButton" disabled>カメラ停止</button>
+            <button onclick="showOfflineData()" style="background: #9c27b0;">📱 オフラインデータ表示</button>
         </div>
         
         <div id="result" class="result">
@@ -766,35 +767,84 @@
             }
         }
         
-        // iframe方式で蔵書保存（JSONP方式に変更）
-        async function saveBookViaIframe(location) {
-            console.log('JSONP方式で書籍保存開始');
+        // オフライン保存機能（緊急対応用）
+        function saveBookOffline(location) {
+            console.log('オフライン保存モード');
             
-            const bookData = {
-                action: 'addBook',
-                isbn: currentBookData.isbn || '',
-                title: currentBookData.title || '',
-                authors: Array.isArray(currentBookData.authors) ? currentBookData.authors.join(', ') : (currentBookData.authors || ''),
-                publisher: currentBookData.publisher || '',
-                publishedDate: currentBookData.publishedDate || '',
-                thumbnail: currentBookData.thumbnail || '',
-                room: location.room,
-                shelf: location.shelf || '未指定',
-                level: location.level || '未指定',
-                detail: location.detail || '',
-                fullLocation: location.fullLocation
+            const offlineData = {
+                timestamp: new Date().toISOString(),
+                book: currentBookData,
+                location: location,
+                status: 'offline_pending'
             };
             
-            console.log('保存データ:', bookData);
+            // ローカルストレージに保存
+            const savedBooks = JSON.parse(localStorage.getItem('offline_books') || '[]');
+            savedBooks.push(offlineData);
+            localStorage.setItem('offline_books', JSON.stringify(savedBooks));
             
+            return {
+                success: true,
+                message: 'オフライン保存されました',
+                addedBy: 'offline_user',
+                addedAt: new Date(),
+                mode: 'offline'
+            };
+        }
+
+        // iframe方式で蔵書保存（オフライン対応版）
+        async function saveBookViaIframe(location) {
+            console.log('蔵書保存開始');
+            
+            // まずオンライン保存を試行
             try {
+                const bookData = {
+                    action: 'addBook',
+                    isbn: currentBookData.isbn || '',
+                    title: currentBookData.title || '',
+                    authors: Array.isArray(currentBookData.authors) ? currentBookData.authors.join(', ') : (currentBookData.authors || ''),
+                    publisher: currentBookData.publisher || '',
+                    publishedDate: currentBookData.publishedDate || '',
+                    thumbnail: currentBookData.thumbnail || '',
+                    room: location.room,
+                    shelf: location.shelf || '未指定',
+                    level: location.level || '未指定',
+                    detail: location.detail || '',
+                    fullLocation: location.fullLocation
+                };
+                
+                console.log('オンライン保存試行');
                 const result = await jsonpRequest(APPS_SCRIPT_URL, bookData);
-                console.log('保存結果:', result);
+                console.log('オンライン保存結果:', result);
                 return result;
+                
             } catch (error) {
-                console.error('JSONP保存エラー:', error);
-                throw error;
+                console.error('オンライン保存失敗:', error);
+                
+                // オフライン保存にフォールバック
+                console.log('オフライン保存にフォールバック');
+                return saveBookOffline(location);
             }
+        }
+
+        // オフラインデータ表示機能
+        function showOfflineData() {
+            const savedBooks = JSON.parse(localStorage.getItem('offline_books') || '[]');
+            
+            if (savedBooks.length === 0) {
+                alert('オフライン保存されたデータはありません。');
+                return;
+            }
+            
+            let message = `📚 オフライン保存データ（${savedBooks.length}件）:\n\n`;
+            savedBooks.forEach((item, index) => {
+                message += `${index + 1}. ${item.book.title}\n`;
+                message += `   位置: ${item.location.fullLocation}\n`;
+                message += `   日時: ${new Date(item.timestamp).toLocaleString('ja-JP')}\n\n`;
+            });
+            
+            message += 'これらのデータは後でGoogle Sheetsに同期できます。';
+            alert(message);
         }
 
         // カメラ停止
