@@ -154,8 +154,53 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
     <script>
-        // Google Apps Script ウェブアプリのURL
+        // Google Apps Script ウェブアプリのURL（最新のデプロイメントURLに更新してください）
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHVWlXiy99pdN5nrpfQ6cmQ9NeBtpYoobwfBuIBzfRgGQt_jB6Cq3j30rBxhBO6esY9A/exec';
+        
+        // デバッグ用: 通信テスト関数
+        async function testGASConnection() {
+            console.log('=== GAS通信テスト開始 ===');
+            console.log('接続先URL:', APPS_SCRIPT_URL);
+            
+            try {
+                // 認証テスト
+                const authResponse = await fetch(`${APPS_SCRIPT_URL}?action=authenticate`);
+                const authText = await authResponse.text();
+                console.log('認証レスポンス:', authText);
+                
+                // 書籍追加テスト
+                const testData = {
+                    action: 'addBook',
+                    isbn: '9784000000099',
+                    title: 'フロントエンドテスト本',
+                    authors: 'テスト著者',
+                    room: 'テスト部屋'
+                };
+                
+                const addResponse = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                const addText = await addResponse.text();
+                console.log('書籍追加レスポンス:', addText);
+                
+            } catch (error) {
+                console.error('GAS通信テストエラー:', error);
+            }
+            
+            console.log('=== GAS通信テスト完了 ===');
+        }
+        
+        // デバッグボタンを追加（一時的に）
+        function addDebugButton() {
+            const debugButton = document.createElement('button');
+            debugButton.textContent = '🔍 GAS通信テスト';
+            debugButton.style.background = '#ff9800';
+            debugButton.onclick = testGASConnection;
+            document.querySelector('.controls').appendChild(debugButton);
+        }
         
         // DOM要素の取得
         const video = document.getElementById('video');
@@ -852,6 +897,9 @@
             if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
                 showError('このアプリはHTTPS環境でのみ動作します。');
             }
+            
+            // デバッグボタンを追加（開発時のみ）
+            addDebugButton();
             
             // Service Worker を登録（PWA機能のため）
             if ('serviceWorker' in navigator) {
