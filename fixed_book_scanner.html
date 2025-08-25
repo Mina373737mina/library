@@ -155,39 +155,109 @@
 
     <script>
         // Google Apps Script ウェブアプリのURL（最新のデプロイメントURLに更新してください）
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHVWlXiy99pdN5nrpfQ6cmQ9NeBtpYoobwfBuIBzfRgGQt_jB6Cq3j30rBxhBO6esY9A/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxwqa7u-oF-V2gSvDaN2pCLyQIB1hXRLWZJ3M3I__57ZIKTGxUW7iPLC7fV38eu2YBx/exec';
         
-        // デバッグ用: 通信テスト関数
+        // JSONP方式でリクエスト送信（CORS回避）
+        function jsonpRequest(url, data) {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                
+                // タイムアウト設定
+                const timeout = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('リクエストがタイムアウトしました（15秒）'));
+                }, 15000);
+                
+                // コールバック関数を定義
+                window[callbackName] = function(response) {
+                    cleanup();
+                    console.log('JSONP レスポンス受信:', response);
+                    resolve(response);
+                };
+                
+                // クリーンアップ関数
+                function cleanup() {
+                    clearTimeout(timeout);
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                    }
+                    const existingScript = document.getElementById(callbackName);
+                    if (existingScript && existingScript.parentNode) {
+                        existingScript.parentNode.removeChild(existingScript);
+                    }
+                }
+                
+                // URLパラメータを構築
+                const params = new URLSearchParams();
+                Object.keys(data).forEach(key => {
+                    if (data[key] !== null && data[key] !== undefined) {
+                        params.append(key, data[key]);
+                    }
+                });
+                params.append('callback', callbackName);
+                
+                const fullUrl = url + '?' + params.toString();
+                console.log('JSONP リクエスト URL:', fullUrl);
+                
+                // スクリプトタグでリクエスト
+                const script = document.createElement('script');
+                script.id = callbackName;
+                script.src = fullUrl;
+                script.onerror = function() {
+                    cleanup();
+                    reject(new Error('スクリプトの読み込みに失敗しました。Google Apps ScriptのURLを確認してください。'));
+                };
+                
+                document.head.appendChild(script);
+            });
+        }
+
+        // デバッグ用: 通信テスト関数（JSONP方式）
         async function testGASConnection() {
-            console.log('=== GAS通信テスト開始 ===');
+            console.log('=== GAS通信テスト開始（JSONP方式） ===');
             console.log('接続先URL:', APPS_SCRIPT_URL);
             
             try {
                 // 認証テスト
-                const authResponse = await fetch(`${APPS_SCRIPT_URL}?action=authenticate`);
-                const authText = await authResponse.text();
-                console.log('認証レスポンス:', authText);
+                console.log('認証テスト開始...');
+                const authResult = await jsonpRequest(APPS_SCRIPT_URL, { action: 'authenticate' });
+                console.log('認証レスポンス:', authResult);
                 
-                // 書籍追加テスト
-                const testData = {
-                    action: 'addBook',
-                    isbn: '9784000000099',
-                    title: 'フロントエンドテスト本',
-                    authors: 'テスト著者',
-                    room: 'テスト部屋'
-                };
-                
-                const addResponse = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(testData)
-                });
-                
-                const addText = await addResponse.text();
-                console.log('書籍追加レスポンス:', addText);
+                if (authResult.success) {
+                    console.log('✅ 認証成功');
+                    
+                    // 書籍追加テスト
+                    console.log('書籍追加テスト開始...');
+                    const testData = {
+                        action: 'addBook',
+                        isbn: '9784000000099',
+                        title: 'フロントエンドテスト本',
+                        authors: 'テスト著者',
+                        publisher: 'テスト出版社',
+                        room: 'テスト部屋',
+                        shelf: '左',
+                        level: '1',
+                        detail: 'JSONP通信テスト'
+                    };
+                    
+                    const addResult = await jsonpRequest(APPS_SCRIPT_URL, testData);
+                    console.log('書籍追加レスポンス:', addResult);
+                    
+                    if (addResult.success) {
+                        console.log('✅ 書籍追加成功');
+                        alert('🎉 GAS通信テスト成功！\n\n書籍がスプレッドシートに追加されました。');
+                    } else {
+                        console.log('❌ 書籍追加失敗:', addResult.error);
+                        alert('❌ 書籍追加失敗: ' + addResult.error);
+                    }
+                } else {
+                    console.log('❌ 認証失敗:', authResult.error);
+                    alert('❌ 認証失敗: ' + authResult.error);
+                }
                 
             } catch (error) {
                 console.error('GAS通信テストエラー:', error);
+                alert('❌ 通信テストエラー: ' + error.message);
             }
             
             console.log('=== GAS通信テスト完了 ===');
@@ -748,103 +818,35 @@
             }
         }
         
-        // iframe方式で蔵書保存
-        function saveBookViaIframe(location) {
-            return new Promise((resolve, reject) => {
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.id = 'save-book-iframe';
-                
-                // URLパラメータで書籍データを送信
-                const params = new URLSearchParams({
-                    action: 'addBook',
-                    isbn: currentBookData.isbn || '',
-                    title: currentBookData.title || '',
-                    authors: Array.isArray(currentBookData.authors) ? currentBookData.authors.join(', ') : (currentBookData.authors || ''),
-                    publisher: currentBookData.publisher || '',
-                    publishedDate: currentBookData.publishedDate || '',
-                    thumbnail: currentBookData.thumbnail || '',
-                    room: location.room,
-                    shelf: location.shelf || '未指定',
-                    level: location.level || '未指定',
-                    detail: location.detail || '',
-                    fullLocation: location.fullLocation
-                });
-                
-                const saveUrl = `${APPS_SCRIPT_URL}?${params.toString()}`;
-                
-                let hasResult = false;
-                const timeoutId = setTimeout(() => {
-                    if (!hasResult) {
-                        hasResult = true;
-                        iframe.remove();
-                        reject(new Error('保存がタイムアウトしました'));
-                    }
-                }, 20000);
-                
-                iframe.onload = function() {
-                    setTimeout(() => {
-                        try {
-                            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                            const content = iframeDoc.body.textContent || iframeDoc.body.innerText;
-                            
-                            if (content) {
-                                try {
-                                    const result = JSON.parse(content);
-                                    if (!hasResult) {
-                                        hasResult = true;
-                                        clearTimeout(timeoutId);
-                                        iframe.remove();
-                                        resolve(result);
-                                    }
-                                    return;
-                                } catch (e) {
-                                    console.log('JSON解析失敗');
-                                }
-                            }
-                            
-                            // JSON解析できない場合、成功と仮定
-                            if (!hasResult) {
-                                hasResult = true;
-                                clearTimeout(timeoutId);
-                                iframe.remove();
-                                resolve({
-                                    success: true,
-                                    message: '蔵書に追加されました',
-                                    addedBy: currentUser.email,
-                                    addedAt: new Date()
-                                });
-                            }
-                            
-                        } catch (e) {
-                            // クロスオリジンエラーの場合、成功と仮定
-                            if (!hasResult) {
-                                hasResult = true;
-                                clearTimeout(timeoutId);
-                                iframe.remove();
-                                resolve({
-                                    success: true,
-                                    message: '蔵書に追加されました',
-                                    addedBy: currentUser.email,
-                                    addedAt: new Date()
-                                });
-                            }
-                        }
-                    }, 3000);
-                };
-                
-                iframe.onerror = function() {
-                    if (!hasResult) {
-                        hasResult = true;
-                        clearTimeout(timeoutId);
-                        iframe.remove();
-                        reject(new Error('保存に失敗しました'));
-                    }
-                };
-                
-                document.body.appendChild(iframe);
-                iframe.src = saveUrl;
-            });
+        // iframe方式で蔵書保存（JSONP方式に変更）
+        async function saveBookViaIframe(location) {
+            console.log('JSONP方式で書籍保存開始');
+            
+            const bookData = {
+                action: 'addBook',
+                isbn: currentBookData.isbn || '',
+                title: currentBookData.title || '',
+                authors: Array.isArray(currentBookData.authors) ? currentBookData.authors.join(', ') : (currentBookData.authors || ''),
+                publisher: currentBookData.publisher || '',
+                publishedDate: currentBookData.publishedDate || '',
+                thumbnail: currentBookData.thumbnail || '',
+                room: location.room,
+                shelf: location.shelf || '未指定',
+                level: location.level || '未指定',
+                detail: location.detail || '',
+                fullLocation: location.fullLocation
+            };
+            
+            console.log('保存データ:', bookData);
+            
+            try {
+                const result = await jsonpRequest(APPS_SCRIPT_URL, bookData);
+                console.log('保存結果:', result);
+                return result;
+            } catch (error) {
+                console.error('JSONP保存エラー:', error);
+                throw error;
+            }
         }
 
         // カメラ停止
