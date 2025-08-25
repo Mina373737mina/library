@@ -155,7 +155,7 @@
 
     <script>
         // Google Apps Script ウェブアプリのURL（最新のデプロイメントURLに更新してください）
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxwqa7u-oF-V2gSvDaN2pCLyQIB1hXRLWZJ3M3I__57ZIKTGxUW7iPLC7fV38eu2YBx/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxX5xt1D1m4qr6xAvFlu8Jd2Imi3VbChC_9U7HaIw1-Jp3uylaMVNlys7EOBIhUShB2jg/exec/exec';
         
         // JSONP方式でリクエスト送信（CORS回避）
         function jsonpRequest(url, data) {
@@ -290,20 +290,28 @@
         let currentUser = null;
         let currentBookData = null;
 
-        // 認証システム（iframe方式）
+        // 認証システム（JSONP方式に変更）
         async function authenticateWithGoogle() {
             try {
                 authButton.disabled = true;
                 authButton.textContent = '認証中...';
                 
-                console.log('認証開始（iframe方式）');
+                console.log('認証開始（JSONP方式）');
                 
                 if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
                     throw new Error('APPS_SCRIPT_URLが設定されていません。');
                 }
                 
-                // iframe で Apps Script にアクセス
-                await authenticateWithIframe();
+                // JSONP方式で認証
+                const result = await jsonpRequest(APPS_SCRIPT_URL, { action: 'authenticate' });
+                
+                if (result.success) {
+                    isAuthenticated = true;
+                    currentUser = result.user;
+                    showAuthSuccess(result.user);
+                } else {
+                    throw new Error(result.error || '認証に失敗しました');
+                }
                 
             } catch (error) {
                 console.error('認証エラー:', error);
@@ -312,114 +320,6 @@
                 authButton.disabled = false;
                 authButton.textContent = 'Googleアカウントで認証';
             }
-        }
-        
-        // iframe を使用した認証（CORSの回避）
-        function authenticateWithIframe() {
-            return new Promise((resolve, reject) => {
-                // 既存の iframe があれば削除
-                const existingIframe = document.getElementById('auth-iframe');
-                if (existingIframe) {
-                    existingIframe.remove();
-                }
-                
-                // 新しい iframe を作成
-                const iframe = document.createElement('iframe');
-                iframe.id = 'auth-iframe';
-                iframe.style.display = 'none';
-                iframe.style.width = '1px';
-                iframe.style.height = '1px';
-                
-                // 認証用URL
-                const authUrl = `${APPS_SCRIPT_URL}?action=authenticate`;
-                
-                let hasResult = false;
-                let timeoutId;
-                
-                // タイムアウト設定（30秒）
-                timeoutId = setTimeout(() => {
-                    if (!hasResult) {
-                        hasResult = true;
-                        iframe.remove();
-                        reject(new Error('認証がタイムアウトしました（30秒）。Google Apps Scriptの処理が重い可能性があります。'));
-                    }
-                }, 30000);
-                
-                // iframe読み込み完了後の処理
-                iframe.onload = function() {
-                    try {
-                        console.log('iframe読み込み完了');
-                        
-                        // 少し待ってからApps Scriptの応答を取得しようと試行
-                        setTimeout(() => {
-                            try {
-                                // 実際の認証処理は複雑なため、テスト用の成功レスポンス
-                                if (!hasResult) {
-                                    hasResult = true;
-                                    clearTimeout(timeoutId);
-                                    iframe.remove();
-                                    
-                                    const mockUser = {
-                                        email: 'mina.ohi@gmail.com',
-                                        timestamp: new Date(),
-                                        authorized: true
-                                    };
-                                    
-                                    isAuthenticated = true;
-                                    currentUser = mockUser;
-                                    showAuthSuccess(mockUser);
-                                    resolve({ success: true, user: mockUser });
-                                }
-                                
-                            } catch (e) {
-                                console.log('同一オリジンでないため、iframe内容にアクセスできません（正常）');
-                                
-                                // クロスオリジンの場合、認証成功と仮定
-                                if (!hasResult) {
-                                    hasResult = true;
-                                    clearTimeout(timeoutId);
-                                    iframe.remove();
-                                    
-                                    const mockUser = {
-                                        email: 'mina.ohi@gmail.com',
-                                        timestamp: new Date(),
-                                        authorized: true
-                                    };
-                                    
-                                    isAuthenticated = true;
-                                    currentUser = mockUser;
-                                    showAuthSuccess(mockUser);
-                                    resolve({ success: true, user: mockUser });
-                                }
-                            }
-                        }, 3000); // 3秒待機
-                        
-                    } catch (error) {
-                        console.error('iframe処理エラー:', error);
-                        if (!hasResult) {
-                            hasResult = true;
-                            clearTimeout(timeoutId);
-                            iframe.remove();
-                            reject(error);
-                        }
-                    }
-                };
-                
-                iframe.onerror = function() {
-                    if (!hasResult) {
-                        hasResult = true;
-                        clearTimeout(timeoutId);
-                        iframe.remove();
-                        reject(new Error('Google Apps Scriptの読み込みに失敗しました'));
-                    }
-                };
-                
-                // iframe をページに追加して読み込み開始
-                document.body.appendChild(iframe);
-                iframe.src = authUrl;
-                
-                console.log('iframe で認証URL読み込み開始:', authUrl);
-            });
         }
 
         // 認証成功時の表示
