@@ -196,8 +196,40 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
     <script>
-        // Google Apps Script ウェブアプリのURL（最新のデプロイメントURLに更新してください）
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyCbf2Mgj_oH4jIGxp2XCxWpSv48TuO8y-l69TPntvORU7wBOzjY-fhwlu4RErQNwHk8g/exec';
+        // Google Apps Script URL（実際のURL）
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx6cxn0Nw7xXK13KMIh5OG5LnyJmOHWdBREOuzm8_hDhZ7JcGqN12UE2xAXAW-OM6HqSg/exec';
+        
+        // シンプルなテスト関数
+        async function testSimpleConnection() {
+            console.log('=== シンプルなGAS接続テスト ===');
+            
+            const testUrl = `${APPS_SCRIPT_URL}?action=test&callback=testCallback`;
+            console.log('テストURL:', testUrl);
+            
+            // コールバック関数を定義
+            window.testCallback = function(response) {
+                console.log('テスト結果:', response);
+                alert('GAS接続テスト結果: ' + JSON.stringify(response));
+                delete window.testCallback; // クリーンアップ
+            };
+            
+            // スクリプトタグで呼び出し
+            const script = document.createElement('script');
+            script.src = testUrl;
+            script.onerror = function() {
+                console.error('スクリプト読み込みエラー');
+                alert('GAS接続エラー: スクリプトの読み込みに失敗しました');
+            };
+            
+            document.head.appendChild(script);
+            
+            // クリーンアップ
+            setTimeout(() => {
+                if (script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+            }, 10000);
+        }
         
         // JSONP方式でリクエスト送信（CORS回避）
         function jsonpRequest(url, data) {
