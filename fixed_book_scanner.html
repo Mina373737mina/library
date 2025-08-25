@@ -179,7 +179,8 @@
         <div class="controls">
             <button id="startButton">カメラ開始</button>
             <button id="stopButton" disabled>カメラ停止</button>
-            <button onclick="showOfflineData()" style="background: #9c27b0;">📱 オフラインデータ表示</button>
+            <button onclick="showOfflineData()" style="background: #9c27b0;">📱 蔵書データ表示</button>
+            <button onclick="clearOfflineData()" style="background: #f44336;">🗑️ データクリア</button>
         </div>
         
         <div id="result" class="result">
@@ -827,24 +828,79 @@
             }
         }
 
-        // オフラインデータ表示機能
+        // オフラインデータ表示・管理機能
         function showOfflineData() {
             const savedBooks = JSON.parse(localStorage.getItem('offline_books') || '[]');
             
             if (savedBooks.length === 0) {
-                alert('オフライン保存されたデータはありません。');
+                alert('📚 保存された蔵書データはありません。');
                 return;
             }
             
-            let message = `📚 オフライン保存データ（${savedBooks.length}件）:\n\n`;
-            savedBooks.forEach((item, index) => {
-                message += `${index + 1}. ${item.book.title}\n`;
-                message += `   位置: ${item.location.fullLocation}\n`;
-                message += `   日時: ${new Date(item.timestamp).toLocaleString('ja-JP')}\n\n`;
+            let message = `📚 蔵書データ（${savedBooks.length}件）\n\n`;
+            savedBooks.forEach((book, index) => {
+                message += `${index + 1}. ${book.title}\n`;
+                message += `   📖 著者: ${book.authors}\n`;
+                message += `   📍 位置: ${book.fullLocation}\n`;
+                message += `   🕐 登録: ${new Date(book.addedAt).toLocaleString('ja-JP')}\n\n`;
             });
             
-            message += 'これらのデータは後でGoogle Sheetsに同期できます。';
-            alert(message);
+            const action = confirm(message + '\n蔵書データをCSV形式でダウンロードしますか？');
+            
+            if (action) {
+                downloadBooksAsCSV(savedBooks);
+            }
+        }
+
+        // CSVダウンロード機能
+        function downloadBooksAsCSV(books) {
+            const headers = ['ID', 'ISBN', 'タイトル', '著者', '出版社', '出版日', '部屋', '本棚', '段', '補足', '登録日時', '登録者'];
+            const csvContent = [
+                headers.join(','),
+                ...books.map(book => [
+                    book.id,
+                    book.isbn,
+                    `"${book.title}"`,
+                    `"${book.authors}"`,
+                    `"${book.publisher}"`,
+                    book.publishedDate,
+                    book.room,
+                    book.shelf,
+                    book.level,
+                    `"${book.detail}"`,
+                    book.addedAt,
+                    book.addedBy
+                ].join(','))
+            ].join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `蔵書データ_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            alert('📥 蔵書データをCSVファイルとしてダウンロードしました！');
+        }
+
+        // データクリア機能
+        function clearOfflineData() {
+            const savedBooks = JSON.parse(localStorage.getItem('offline_books') || '[]');
+            
+            if (savedBooks.length === 0) {
+                alert('クリアするデータがありません。');
+                return;
+            }
+            
+            const confirmed = confirm(`${savedBooks.length}件の蔵書データをクリアしますか？\n\nこの操作は取り消せません。\n先にCSVダウンロードをお勧めします。`);
+            
+            if (confirmed) {
+                localStorage.removeItem('offline_books');
+                alert('🗑️ 蔵書データをクリアしました。');
+            }
         }
 
         // カメラ停止
