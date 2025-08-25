@@ -170,6 +170,7 @@
         <!-- 認証セクション -->
         <div id="authSection" class="auth-section">
             <button id="authButton">Googleアカウントで認証</button>
+            <button id="skipAuthButton" style="background: #ff9800; margin-left: 10px;">🔓 認証スキップ（テスト用）</button>
             <div id="authStatus" style="display: none;"></div>
         </div>
         
@@ -302,13 +303,21 @@
             console.log('=== GAS通信テスト完了 ===');
         }
         
-        // デバッグボタンを追加（一時的に）
-        function addDebugButton() {
-            const debugButton = document.createElement('button');
-            debugButton.textContent = '🔍 GAS通信テスト';
-            debugButton.style.background = '#ff9800';
-            debugButton.onclick = testGASConnection;
-            document.querySelector('.controls').appendChild(debugButton);
+        // 認証スキップ機能（テスト用）
+        function skipAuthentication() {
+            console.log('認証スキップ実行');
+            
+            isAuthenticated = true;
+            currentUser = {
+                email: 'mina.ohi@gmail.com',
+                timestamp: new Date(),
+                authorized: true,
+                authMethod: 'skipped_for_testing'
+            };
+            
+            showAuthSuccess(currentUser);
+            
+            alert('🔓 認証をスキップしました！\n\nテスト用モードで蔵書管理機能を使用できます。');
         }
         
         // DOM要素の取得
@@ -825,10 +834,20 @@
             isbnDisplay.textContent = message;
         }
 
+        // デバッグボタンを追加（一時的に）
+        function addDebugButton() {
+            const debugButton = document.createElement('button');
+            debugButton.textContent = '🔍 GAS通信テスト';
+            debugButton.style.background = '#ff9800';
+            debugButton.onclick = testGASConnection;
+            document.querySelector('.controls').appendChild(debugButton);
+        }
+
         // イベントリスナー
         startButton.addEventListener('click', startBarcodeDetection);
         stopButton.addEventListener('click', stopBarcodeDetection);
         authButton.addEventListener('click', authenticateWithGoogle);
+        document.getElementById('skipAuthButton').addEventListener('click', skipAuthentication);
 
         // ページ読み込み時の初期化
         document.addEventListener('DOMContentLoaded', function() {
